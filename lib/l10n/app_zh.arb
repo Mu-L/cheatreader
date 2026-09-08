@@ -243,5 +243,7 @@
       "appName": {}
     }
   },
-  "trayIconExit": "退出"
+  "trayIconExit": "退出",
+  "textSelectionTitle": "允许选择文本",
+  "textSelectionSubtitle": "开启后可拖选和复制文字，方便翻译；关闭后可拖动文字移动窗口。"
 }

@@ -1051,6 +1051,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Exit'**
   String get trayIconExit;
+
+  /// No description provided for @textSelectionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow text selection'**
+  String get textSelectionTitle;
+
+  /// No description provided for @textSelectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select and copy text for translation. Turn off to drag the window from the text.'**
+  String get textSelectionSubtitle;
 }
 
 class _AppLocalizationsDelegate

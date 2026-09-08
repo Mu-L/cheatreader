@@ -243,5 +243,7 @@
       "appName": {}
     }
   },
-  "trayIconExit": "Exit"
+  "trayIconExit": "Exit",
+  "textSelectionTitle": "Allow text selection",
+  "textSelectionSubtitle": "Select and copy text for translation. Turn off to drag the window from the text."
 }

@@ -61,6 +61,7 @@ class ReaderSettings {
     required this.hideTaskbarIcon,
     required this.locatorHighlightEnabled,
     required this.readingAnimationEnabled,
+    this.textSelectionEnabled = false,
     required this.preferPunctuationLineBreaks,
     required this.fontScale,
     required this.lineSpacing,
@@ -106,6 +107,7 @@ class ReaderSettings {
     hideTaskbarIcon: false,
     locatorHighlightEnabled: true,
     readingAnimationEnabled: false,
+    textSelectionEnabled: false,
     preferPunctuationLineBreaks: true,
     fontScale: 1.0,
     lineSpacing: 1.5,
@@ -134,6 +136,7 @@ class ReaderSettings {
   final bool hideTaskbarIcon;
   final bool locatorHighlightEnabled;
   final bool readingAnimationEnabled;
+  final bool textSelectionEnabled;
   final bool preferPunctuationLineBreaks;
   final double fontScale;
   final double lineSpacing;
@@ -164,6 +167,7 @@ class ReaderSettings {
     bool? hideTaskbarIcon,
     bool? locatorHighlightEnabled,
     bool? readingAnimationEnabled,
+    bool? textSelectionEnabled,
     bool? preferPunctuationLineBreaks,
     double? fontScale,
     double? lineSpacing,
@@ -196,6 +200,7 @@ class ReaderSettings {
           locatorHighlightEnabled ?? this.locatorHighlightEnabled,
       readingAnimationEnabled:
           readingAnimationEnabled ?? this.readingAnimationEnabled,
+      textSelectionEnabled: textSelectionEnabled ?? this.textSelectionEnabled,
       preferPunctuationLineBreaks:
           preferPunctuationLineBreaks ?? this.preferPunctuationLineBreaks,
       fontScale: fontScale ?? this.fontScale,

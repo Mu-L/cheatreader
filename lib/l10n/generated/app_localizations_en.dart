@@ -540,4 +540,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trayIconExit => 'Exit';
+
+  @override
+  String get textSelectionTitle => 'Allow text selection';
+
+  @override
+  String get textSelectionSubtitle =>
+      'Select and copy text for translation. Turn off to drag the window from the text.';
 }

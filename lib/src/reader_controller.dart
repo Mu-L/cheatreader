@@ -274,6 +274,10 @@ class ReaderController extends ChangeNotifier {
     _updateSettings(_settings.copyWith(readingAnimationEnabled: value));
   }
 
+  void setTextSelectionEnabled(bool value) {
+    _updateSettings(_settings.copyWith(textSelectionEnabled: value));
+  }
+
   void setPreferPunctuationLineBreaks(bool value) {
     _updateSettings(_settings.copyWith(preferPunctuationLineBreaks: value));
   }

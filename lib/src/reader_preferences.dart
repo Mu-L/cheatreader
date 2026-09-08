@@ -28,6 +28,7 @@ class SharedPreferencesReaderPreferencesStore
     implements ReaderPreferencesStore {
   SharedPreferencesReaderPreferencesStore(this._preferences);
 
+  static const _textSelectionEnabledKey = 'reader.textSelectionEnabled';
   static const _oneLineModeKey = 'reader.oneLineMode';
   static const _modeToggleTriggerKey = 'reader.modeToggleTrigger';
   static const _languageModeKey = 'reader.languageMode';
@@ -69,6 +70,8 @@ class SharedPreferencesReaderPreferencesStore
   Future<ReaderPreferencesSnapshot> loadSnapshot() async {
     return ReaderPreferencesSnapshot(
       settings: ReaderSettings(
+        textSelectionEnabled:
+            _preferences.getBool(_textSelectionEnabledKey) ?? false,
         oneLineMode:
             _preferences.getBool(_oneLineModeKey) ??
             ReaderSettings.defaults.oneLineMode,
@@ -195,6 +198,10 @@ class SharedPreferencesReaderPreferencesStore
         settings.customAppDisplayName!.trim(),
       );
     }
+    await _preferences.setBool(
+      _textSelectionEnabledKey,
+      settings.textSelectionEnabled,
+    );
     await _preferences.setBool(_alwaysOnTopKey, settings.alwaysOnTop);
     await _preferences.setBool(_hideTaskbarIconKey, settings.hideTaskbarIcon);
     await _preferences.setBool(

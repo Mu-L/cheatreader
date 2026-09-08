@@ -518,4 +518,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trayIconExit => '退出';
+
+  @override
+  String get textSelectionTitle => '允许选择文本';
+
+  @override
+  String get textSelectionSubtitle => '开启后可拖选和复制文字，方便翻译；关闭后可拖动文字移动窗口。';
 }

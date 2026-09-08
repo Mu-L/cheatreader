@@ -1293,7 +1293,7 @@ class _ReaderSurfaceState extends State<ReaderSurface>
     required int maxLines,
     required double lineHeight,
   }) {
-    final textWidget = Text(
+    final readerText = Text(
       text,
       key: ValueKey<String>('reader-text-$text-$_readerTransitionToken'),
       softWrap: false,
@@ -1301,6 +1301,9 @@ class _ReaderSurfaceState extends State<ReaderSurface>
       overflow: TextOverflow.clip,
       style: style,
     );
+    final textWidget = widget.controller.settings.textSelectionEnabled
+        ? SelectionArea(child: readerText)
+        : readerText;
 
     if (!widget.controller.settings.readingAnimationEnabled) {
       return textWidget;
@@ -1398,8 +1401,13 @@ class _ReaderSurfaceState extends State<ReaderSurface>
       textDirection: textDirection,
       textScaler: textScaler,
       maxLines: 1,
-    )..layout(maxWidth: maxWidth);
-    return !painter.didExceedMaxLines;
+    )..layout();
+    // TextPainter may report a single line even when a long unbreakable word
+    // extends beyond the available width. Check the measured width as well so
+    // the wrapping algorithm never clips the tail of an English word.
+    final fits = !painter.didExceedMaxLines && painter.width <= maxWidth;
+    painter.dispose();
+    return fits;
   }
 
   int _preferWrapBoundary(String text, int start, int fallbackEnd) {
@@ -2124,6 +2132,13 @@ class _ReaderControlPanelState extends State<_ReaderControlPanel> {
         onChanged: controller.setTransparentTextShadowEnabled,
         title: Text(l10n.transparentTextShadowTitle),
         subtitle: Text(l10n.transparentTextShadowSubtitle),
+      ),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        value: controller.settings.textSelectionEnabled,
+        onChanged: controller.setTextSelectionEnabled,
+        title: Text(l10n.textSelectionTitle),
+        subtitle: Text(l10n.textSelectionSubtitle),
       ),
       SwitchListTile(
         contentPadding: EdgeInsets.zero,
