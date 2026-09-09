@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'src/platform_window_controller.dart';
 import 'src/platform_startup_behavior.dart';
 import 'src/reader_app.dart';
+import 'src/reader_bookshelf_storage.dart';
 import 'src/reader_controller.dart';
 import 'src/reader_custom_font.dart';
 import 'src/reader_file_bookmark_service.dart';
@@ -62,7 +63,11 @@ Future<void> main(List<String> args) async {
 
 Future<ReaderPreferencesStore> _createPreferencesStore() async {
   try {
-    return await SharedPreferencesReaderPreferencesStore.create();
+    return await SharedPreferencesReaderPreferencesStore.create(
+      bookshelfStorage: ReaderBookshelfStorage(
+        PlatformReaderLibraryStorage().resolveBaseDirectory,
+      ),
+    );
   } catch (_) {
     return MemoryReaderPreferencesStore();
   }

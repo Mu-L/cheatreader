@@ -21,6 +21,10 @@ abstract class ReaderLibraryStorage {
 }
 
 class PlatformReaderLibraryStorage implements ReaderLibraryStorage {
+  PlatformReaderLibraryStorage({Directory? baseDirectory})
+    : _baseDirectory = baseDirectory;
+
+  final Directory? _baseDirectory;
   static const _libraryFolderName = 'library';
 
   @override
@@ -28,7 +32,7 @@ class PlatformReaderLibraryStorage implements ReaderLibraryStorage {
     ImportedTextFile file, {
     String? existingStoredPath,
   }) async {
-    final baseDirectory = await _resolveBaseDirectory();
+    final baseDirectory = await resolveBaseDirectory();
     await baseDirectory.create(recursive: true);
 
     final targetPath =
@@ -38,7 +42,19 @@ class PlatformReaderLibraryStorage implements ReaderLibraryStorage {
           '${DateTime.now().microsecondsSinceEpoch}_${_slugify(file.displayName)}.txt',
         );
     final targetFile = File(targetPath);
-    await targetFile.writeAsString(file.content, encoding: utf8, flush: true);
+    final temporaryFile = File(
+      '$targetPath.tmp-${DateTime.now().microsecondsSinceEpoch}',
+    );
+    try {
+      await temporaryFile.writeAsString(
+        file.content,
+        encoding: utf8,
+        flush: true,
+      );
+      await temporaryFile.rename(targetPath);
+    } finally {
+      if (await temporaryFile.exists()) await temporaryFile.delete();
+    }
     return StoredReaderFile(path: targetFile.path);
   }
 
@@ -50,34 +66,44 @@ class PlatformReaderLibraryStorage implements ReaderLibraryStorage {
     }
   }
 
-  Future<Directory> _resolveBaseDirectory() async {
+  Future<Directory> resolveBaseDirectory() async {
+    if (_baseDirectory case final directory?) return directory;
     if (Platform.isMacOS) {
       final home = Platform.environment['HOME'];
       if (home == null || home.isEmpty) {
         throw StateError('HOME is unavailable');
       }
       return Directory(
-        path.join(home, 'Library', 'Application Support', 'CheatReader', _libraryFolderName),
+        path.join(
+          home,
+          'Library',
+          'Application Support',
+          'CheatReader',
+          _libraryFolderName,
+        ),
       );
     }
 
     if (Platform.isLinux) {
       final dataHome = Platform.environment['XDG_DATA_HOME'];
       final home = Platform.environment['HOME'];
-      final root =
-          dataHome?.isNotEmpty == true
-              ? dataHome!
-              : path.join(home ?? Directory.current.path, '.local', 'share');
+      final root = dataHome?.isNotEmpty == true
+          ? dataHome!
+          : path.join(home ?? Directory.current.path, '.local', 'share');
       return Directory(path.join(root, 'cheatreader', _libraryFolderName));
     }
 
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'];
-      final root = appData?.isNotEmpty == true ? appData! : Directory.current.path;
+      final root = appData?.isNotEmpty == true
+          ? appData!
+          : Directory.current.path;
       return Directory(path.join(root, 'CheatReader', _libraryFolderName));
     }
 
-    return Directory(path.join(Directory.systemTemp.path, 'cheatreader', _libraryFolderName));
+    return Directory(
+      path.join(Directory.systemTemp.path, 'cheatreader', _libraryFolderName),
+    );
   }
 
   String _slugify(String value) {
@@ -92,7 +118,9 @@ class PlatformReaderLibraryStorage implements ReaderLibraryStorage {
 
 class MemoryReaderLibraryStorage implements ReaderLibraryStorage {
   MemoryReaderLibraryStorage({Map<String, String>? initialFiles})
-    : files = Map<String, String>.from(initialFiles ?? const <String, String>{});
+    : files = Map<String, String>.from(
+        initialFiles ?? const <String, String>{},
+      );
 
   final Map<String, String> files;
   var _counter = 0;
@@ -102,7 +130,8 @@ class MemoryReaderLibraryStorage implements ReaderLibraryStorage {
     ImportedTextFile file, {
     String? existingStoredPath,
   }) async {
-    final storedPath = existingStoredPath ?? '/library/${_counter++}_${file.displayName}';
+    final storedPath =
+        existingStoredPath ?? '/library/${_counter++}_${file.displayName}';
     files[storedPath] = file.content;
     return StoredReaderFile(path: storedPath);
   }

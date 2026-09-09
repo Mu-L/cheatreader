@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'reader_book.dart';
+import 'reader_bookshelf_storage.dart';
 import 'reader_settings.dart';
 import 'reader_shortcuts.dart';
 
@@ -22,11 +23,32 @@ abstract class ReaderPreferencesStore {
   Future<void> saveSettings(ReaderSettings settings);
 
   Future<void> saveBookshelf(List<ReaderBookRecord> bookshelf);
+
+  Future<void> saveBook(
+    ReaderBookRecord book, {
+    bool onlyIfPresent = false,
+  }) async {
+    final books = (await loadSnapshot()).bookshelf;
+    if (onlyIfPresent && !books.any((item) => item.path == book.path)) return;
+    await saveBookshelf([
+      ...books.where((item) => item.path != book.path),
+      book,
+    ]);
+  }
+
+  Future<void> removeBook(String path) async {
+    final books = (await loadSnapshot()).bookshelf;
+    await saveBookshelf(books.where((book) => book.path != path).toList());
+  }
 }
 
-class SharedPreferencesReaderPreferencesStore
-    implements ReaderPreferencesStore {
-  SharedPreferencesReaderPreferencesStore(this._preferences);
+class SharedPreferencesReaderPreferencesStore extends ReaderPreferencesStore {
+  SharedPreferencesReaderPreferencesStore(
+    this._preferences, {
+    ReaderBookshelfStorage? bookshelfStorage,
+  }) : _bookshelfStorage = bookshelfStorage;
+
+  final ReaderBookshelfStorage? _bookshelfStorage;
 
   static const _textSelectionEnabledKey = 'reader.textSelectionEnabled';
   static const _oneLineModeKey = 'reader.oneLineMode';
@@ -61,9 +83,14 @@ class SharedPreferencesReaderPreferencesStore
 
   final SharedPreferences _preferences;
 
-  static Future<SharedPreferencesReaderPreferencesStore> create() async {
+  static Future<SharedPreferencesReaderPreferencesStore> create({
+    ReaderBookshelfStorage? bookshelfStorage,
+  }) async {
     final preferences = await SharedPreferences.getInstance();
-    return SharedPreferencesReaderPreferencesStore(preferences);
+    return SharedPreferencesReaderPreferencesStore(
+      preferences,
+      bookshelfStorage: bookshelfStorage,
+    );
   }
 
   @override
@@ -173,7 +200,8 @@ class SharedPreferencesReaderPreferencesStore
           ReaderSettings.defaults.autoPageGranularity,
         ),
       ),
-      bookshelf: _loadBookshelf(),
+      bookshelf:
+          await _bookshelfStorage?.load(_loadBookshelf()) ?? _loadBookshelf(),
     );
   }
 
@@ -309,10 +337,39 @@ class SharedPreferencesReaderPreferencesStore
 
   @override
   Future<void> saveBookshelf(List<ReaderBookRecord> bookshelf) async {
+    if (_bookshelfStorage case final storage?) {
+      await storage.update(_loadBookshelf(), replace: bookshelf);
+      return;
+    }
     await _preferences.setString(
       _bookshelfKey,
       jsonEncode(bookshelf.map((book) => book.toJson()).toList()),
     );
+  }
+
+  @override
+  Future<void> saveBook(
+    ReaderBookRecord book, {
+    bool onlyIfPresent = false,
+  }) async {
+    if (_bookshelfStorage case final storage?) {
+      await storage.update(
+        _loadBookshelf(),
+        book: book,
+        onlyIfPresent: onlyIfPresent,
+      );
+    } else {
+      await super.saveBook(book, onlyIfPresent: onlyIfPresent);
+    }
+  }
+
+  @override
+  Future<void> removeBook(String path) async {
+    if (_bookshelfStorage case final storage?) {
+      await storage.update(_loadBookshelf(), removePath: path);
+    } else {
+      await super.removeBook(path);
+    }
   }
 
   ReaderShortcutBindings _loadShortcutBindings() {
@@ -414,7 +471,7 @@ class SharedPreferencesReaderPreferencesStore
   }
 }
 
-class MemoryReaderPreferencesStore implements ReaderPreferencesStore {
+class MemoryReaderPreferencesStore extends ReaderPreferencesStore {
   MemoryReaderPreferencesStore({
     ReaderSettings? initialSettings,
     List<ReaderBookRecord>? initialBookshelf,

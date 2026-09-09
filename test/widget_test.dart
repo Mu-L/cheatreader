@@ -22,6 +22,51 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final oneLine in [true, false]) {
+    testWidgets('wheel steps preserve wrapped paragraphs in mode $oneLine', (
+      tester,
+    ) async {
+      final controller = ReaderController(
+        initialContent: 'short\n${'middle paragraph ' * 200}\nlast',
+        preferencesStore: MemoryReaderPreferencesStore(
+          initialSettings: ReaderSettings.defaults.copyWith(
+            oneLineMode: oneLine,
+          ),
+        ),
+        windowController: _FakePlatformWindowController(),
+        fileBookmarkService: _FakeReaderFileBookmarkService(),
+        importService: _FakeReaderImportService(),
+        libraryStorage: MemoryReaderLibraryStorage(),
+      );
+      await controller.initialize();
+      await tester.pumpWidget(
+        CheatReaderApp(
+          controller: controller,
+          windowController: _FakePlatformWindowController(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.sendEventToBinding(
+        const PointerScrollEvent(
+          position: Offset(400, 300),
+          scrollDelta: Offset(0, 112),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.currentLineIndex, 1);
+      expect(find.text('last'), findsNothing);
+      await tester.sendEventToBinding(
+        const PointerScrollEvent(
+          position: Offset(400, 300),
+          scrollDelta: Offset(0, -112),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(controller.currentLineIndex, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  }
+
   testWidgets('renders the reader surface without app chrome', (
     WidgetTester tester,
   ) async {

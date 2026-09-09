@@ -39,6 +39,7 @@ class ReaderController extends ChangeNotifier {
   final ReaderImportService _importService;
   final ReaderLibraryStorage _libraryStorage;
   final String _fallbackContent;
+  Future<void> _bookshelfWriteQueue = Future<void>.value();
 
   ReaderSettings _settings = ReaderSettings.defaults;
   List<ReaderBookRecord> _bookshelf = const [];
@@ -480,7 +481,7 @@ class ReaderController extends ChangeNotifier {
         return null;
       }
 
-      return _openImportedFile(file, storedBookPath: file.path);
+      return await _openImportedFile(file, storedBookPath: file.path);
     } catch (_) {
       return stringsForSettings(_settings).importFailure;
     }
@@ -495,6 +496,7 @@ class ReaderController extends ChangeNotifier {
     required String storedBookPath,
     String? existingBookmark,
     String? existingStoredFilePath,
+    bool persistManagedCopy = true,
   }) async {
     if (!_importService.isSupportedTextFilePath(path)) {
       return stringsForSettings(_settings).importUnsupportedFormat;
@@ -502,11 +504,12 @@ class ReaderController extends ChangeNotifier {
 
     try {
       final file = await _importService.openTxtFile(path);
-      return _openImportedFile(
+      return await _openImportedFile(
         file,
         storedBookPath: storedBookPath,
         existingBookmark: existingBookmark,
         existingStoredFilePath: existingStoredFilePath,
+        persistManagedCopy: persistManagedCopy,
       );
     } catch (_) {
       _staleBookPaths.add(storedBookPath);
@@ -531,7 +534,7 @@ class ReaderController extends ChangeNotifier {
         .where((book) => book.path != path)
         .toList(growable: false);
     _staleBookPaths.remove(path);
-    await _preferencesStore.saveBookshelf(_bookshelf);
+    await _queueBookshelfWrite(() => _preferencesStore.removeBook(path));
     if (record?.storedFilePath case final storedFilePath?) {
       await _libraryStorage.deleteStoredFile(storedFilePath);
     }
@@ -695,7 +698,16 @@ class ReaderController extends ChangeNotifier {
         lastOpenedAt: DateTime.now(),
       ),
     );
-    await _preferencesStore.saveBookshelf(_bookshelf);
+    final updatedRecord = currentBook!;
+    await _queueBookshelfWrite(
+      () => _preferencesStore.saveBook(updatedRecord, onlyIfPresent: true),
+    );
+  }
+
+  Future<void> _queueBookshelfWrite(Future<void> Function() write) async {
+    final operation = _bookshelfWriteQueue.then((_) => write());
+    _bookshelfWriteQueue = operation.catchError((_) {});
+    await operation;
   }
 
   Future<String?> _openImportedFile(
@@ -703,30 +715,31 @@ class ReaderController extends ChangeNotifier {
     required String storedBookPath,
     String? existingBookmark,
     String? existingStoredFilePath,
+    bool persistManagedCopy = true,
   }) async {
     final existingRecord = _findBookRecord(storedBookPath);
     final displayName = existingRecord?.displayName ?? file.displayName;
-    _staleBookPaths.remove(storedBookPath);
-    _lines = _splitLines(file.content, _settings.languageMode);
-    _currentBookPath = storedBookPath;
-    _currentDisplayName = displayName;
-
-    final storedFile = await _libraryStorage.saveImportedFile(
-      file,
-      existingStoredPath:
-          existingStoredFilePath ?? existingRecord?.storedFilePath,
-    );
+    final storedFile = persistManagedCopy
+        ? await _libraryStorage.saveImportedFile(
+            file,
+            existingStoredPath:
+                existingStoredFilePath ?? existingRecord?.storedFilePath,
+          )
+        : StoredReaderFile(
+            path:
+                existingStoredFilePath ??
+                existingRecord?.storedFilePath ??
+                file.path,
+          );
 
     final bookmark =
         existingBookmark ??
         existingRecord?.fileBookmark ??
         await _fileBookmarkService.createBookmark(file.path);
 
-    final restoredReadLineIndex = _clampLineIndex(
-      existingRecord?.lastReadLineIndex ?? 0,
-    );
-    _readLineIndex = restoredReadLineIndex;
-    _burnedLineCount = 0;
+    final nextLines = _splitLines(file.content, _settings.languageMode);
+    final restoredReadLineIndex = (existingRecord?.lastReadLineIndex ?? 0)
+        .clamp(0, math.max(0, nextLines.length - 1));
 
     final updatedRecord =
         (existingRecord ??
@@ -743,14 +756,20 @@ class ReaderController extends ChangeNotifier {
             .copyWith(
               displayName: displayName,
               lastOpenedAt: DateTime.now(),
-              lastReadLineIndex: _readLineIndex,
+              lastReadLineIndex: restoredReadLineIndex.toInt(),
               burnedLineCount: 0,
               burnModeEnabled: false,
               storedFilePath: storedFile.path,
               fileBookmark: bookmark,
             );
+    await _queueBookshelfWrite(() => _preferencesStore.saveBook(updatedRecord));
+    _staleBookPaths.remove(storedBookPath);
+    _lines = nextLines;
+    _currentBookPath = storedBookPath;
+    _currentDisplayName = displayName;
+    _readLineIndex = restoredReadLineIndex.toInt();
+    _burnedLineCount = 0;
     _replaceBookRecord(updatedRecord);
-    await _preferencesStore.saveBookshelf(_bookshelf);
     notifyListeners();
     return null;
   }
@@ -771,6 +790,7 @@ class ReaderController extends ChangeNotifier {
         storedBookPath: record.path,
         existingBookmark: record.fileBookmark,
         existingStoredFilePath: storedFilePath,
+        persistManagedCopy: false,
       );
       if (localMessage == null) {
         return null;

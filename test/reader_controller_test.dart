@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cheatreader/src/platform_window_controller_base.dart';
 import 'package:cheatreader/src/reader_book.dart';
 import 'package:cheatreader/src/reader_controller.dart';
@@ -15,6 +17,32 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('ReaderController', () {
+    test(
+      'picker write failure preserves the previous book and position',
+      () async {
+        final storage = _FailingReaderLibraryStorage();
+        final controller = ReaderController(
+          initialContent: 'fallback',
+          preferencesStore: MemoryReaderPreferencesStore(),
+          windowController: FakePlatformWindowController(),
+          fileBookmarkService: FakeReaderFileBookmarkService(),
+          importService: FakeReaderImportService(
+            files: {'/old.txt': 'first\nsecond\nthird', '/new.txt': 'short'},
+            pickedPath: '/new.txt',
+          ),
+          libraryStorage: storage,
+        );
+        await controller.initialize();
+        await controller.importFromPath('/old.txt');
+        controller.jumpToLineNumber(3);
+        storage.fail = true;
+        expect(await controller.importFromPicker(), isNotNull);
+        expect(controller.currentBook!.path, '/old.txt');
+        expect(controller.currentLineIndex, 2);
+        expect(controller.visibleText, 'third');
+      },
+    );
+
     test('clamps line and page navigation to content bounds', () async {
       final controller = ReaderController(
         initialContent: 'A\nB\nC\nD\nE',
@@ -687,6 +715,98 @@ void main() {
       expect(secondController.currentDisplayName, 'persist.txt');
       expect(secondController.visibleLines.first, '第一版');
     });
+
+    test(
+      'reports managed-copy write failures without replacing active content',
+      () async {
+        final storage = _FailingReaderLibraryStorage();
+        final importer = FakeReaderImportService(
+          files: {'/book.txt': '第一行\n第二行'},
+        );
+        final controller = ReaderController(
+          initialContent: 'fallback',
+          preferencesStore: MemoryReaderPreferencesStore(),
+          windowController: FakePlatformWindowController(),
+          fileBookmarkService: FakeReaderFileBookmarkService(),
+          importService: importer,
+          libraryStorage: storage,
+        );
+        await controller.initialize();
+        storage.fail = true;
+
+        final message = await controller.importFromPath('/book.txt');
+
+        expect(message, isNotNull);
+        expect(controller.hasImportedBook, isFalse);
+        expect(controller.visibleText, 'fallback');
+      },
+    );
+
+    test('reopening a managed copy does not rewrite it', () async {
+      final storage = _FailingReaderLibraryStorage();
+      final importer = FakeReaderImportService(
+        files: {'/book.txt': '第一行\n第二行'},
+        managedFiles: storage.files,
+      );
+      final controller = ReaderController(
+        initialContent: 'fallback',
+        preferencesStore: MemoryReaderPreferencesStore(),
+        windowController: FakePlatformWindowController(),
+        fileBookmarkService: FakeReaderFileBookmarkService(),
+        importService: importer,
+        libraryStorage: storage,
+      );
+      await controller.initialize();
+      await controller.importFromPath('/book.txt');
+      final writesAfterImport = storage.writeCount;
+
+      await controller.openBookshelfEntry('/book.txt');
+
+      expect(storage.writeCount, writesAfterImport);
+    });
+
+    test('progress saves merge books added by another instance', () async {
+      final store = MemoryReaderPreferencesStore();
+      final storage = MemoryReaderLibraryStorage();
+      final importer = FakeReaderImportService(
+        files: {'/old.txt': '旧书\n第二行', '/new.txt': '新书'},
+        managedFiles: storage.files,
+      );
+      final first = ReaderController(
+        initialContent: 'fallback',
+        preferencesStore: store,
+        windowController: FakePlatformWindowController(),
+        fileBookmarkService: FakeReaderFileBookmarkService(),
+        importService: importer,
+        libraryStorage: storage,
+      );
+      final second = ReaderController(
+        initialContent: 'fallback',
+        preferencesStore: store,
+        windowController: FakePlatformWindowController(),
+        fileBookmarkService: FakeReaderFileBookmarkService(),
+        importService: importer,
+        libraryStorage: storage,
+      );
+      await first.initialize();
+      await first.importFromPath('/old.txt');
+      await second.initialize();
+      await second.importFromPath('/new.txt');
+      first.nextLine();
+      await Future<void>.delayed(Duration.zero);
+
+      final snapshot = await store.loadSnapshot();
+      expect(
+        snapshot.bookshelf.map((book) => book.path),
+        containsAll(['/old.txt', '/new.txt']),
+      );
+      expect(
+        snapshot.bookshelf
+            .firstWhere((book) => book.path == '/old.txt')
+            .lastReadLineIndex,
+        1,
+      );
+    });
   });
 
   group('SharedPreferencesReaderPreferencesStore', () {
@@ -997,4 +1117,21 @@ class FakePlatformWindowController implements PlatformWindowController {
 
   @override
   Future<void> closeWindow() async {}
+}
+
+class _FailingReaderLibraryStorage extends MemoryReaderLibraryStorage {
+  bool fail = false;
+  int writeCount = 0;
+
+  @override
+  Future<StoredReaderFile> saveImportedFile(
+    ImportedTextFile file, {
+    String? existingStoredPath,
+  }) async {
+    writeCount += 1;
+    if (fail) {
+      throw const FileSystemException('disk full');
+    }
+    return super.saveImportedFile(file, existingStoredPath: existingStoredPath);
+  }
 }

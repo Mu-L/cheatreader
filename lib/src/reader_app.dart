@@ -24,6 +24,7 @@ import 'reader_localization.dart';
 import 'reader_release_checker.dart';
 import 'reader_settings.dart';
 import 'reader_shortcuts.dart';
+import 'reader_text_wrapper.dart';
 
 const _readerDarkTextColor = Color(0xFF111111);
 const _readerLightTextColor = Color(ReaderSettings.defaultCustomTextColorValue);
@@ -220,6 +221,8 @@ class _ReaderSurfaceState extends State<ReaderSurface>
   ReaderShortcutKey? _registeredSystemBossKey;
   Future<void>? _bossKeyRegistrationTask;
   Timer? _bossKeyTriggerDebounceTimer;
+  Future<void> _pointerScrollTask = Future<void>.value();
+  final _textWrapper = ReaderTextWrapper();
   bool _disposed = false;
   DateTime? _lastForegroundRecoveryAt;
   int? _lastOneLineSourceIndex;
@@ -453,8 +456,13 @@ class _ReaderSurfaceState extends State<ReaderSurface>
       return;
     }
 
-    final delta = signal.scrollDelta.dy;
-    if (delta == 0) {
+    _pointerScrollTask = _pointerScrollTask.then(
+      (_) => _handlePointerScroll(signal.scrollDelta.dy),
+    );
+  }
+
+  Future<void> _handlePointerScroll(double delta) async {
+    if (!mounted || delta == 0) {
       return;
     }
 
@@ -462,12 +470,16 @@ class _ReaderSurfaceState extends State<ReaderSurface>
     if (delta > 0) {
       for (var index = 0; index < steps; index += 1) {
         _advanceReading();
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
       }
       return;
     }
 
     for (var index = 0; index < steps; index += 1) {
       _rewindReading();
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted) return;
     }
   }
 
@@ -1352,98 +1364,14 @@ class _ReaderSurfaceState extends State<ReaderSurface>
     required TextScaler textScaler,
     required bool preferPunctuationLineBreaks,
   }) {
-    if (text.isEmpty || maxWidth <= 0) {
-      return text.isEmpty ? const <String>[''] : <String>[text];
-    }
-
-    final segments = <String>[];
-    var start = 0;
-    while (start < text.length) {
-      var low = start + 1;
-      var high = text.length;
-      var best = start + 1;
-      while (low <= high) {
-        final middle = (low + high) ~/ 2;
-        final candidate = text.substring(start, middle);
-        if (_fitsSingleVisualLine(
-          text: candidate,
-          maxWidth: maxWidth,
-          style: style,
-          textDirection: textDirection,
-          textScaler: textScaler,
-        )) {
-          best = middle;
-          low = middle + 1;
-        } else {
-          high = middle - 1;
-        }
-      }
-
-      final wrapEnd = preferPunctuationLineBreaks
-          ? _preferWrapBoundary(text, start, best)
-          : best;
-      segments.add(text.substring(start, wrapEnd));
-      start = wrapEnd;
-    }
-
-    return segments.isEmpty ? const <String>[''] : segments;
-  }
-
-  bool _fitsSingleVisualLine({
-    required String text,
-    required double maxWidth,
-    required TextStyle style,
-    required TextDirection textDirection,
-    required TextScaler textScaler,
-  }) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
+    return _textWrapper.wrap(
+      text: text,
+      maxWidth: maxWidth,
+      style: style,
       textDirection: textDirection,
       textScaler: textScaler,
-      maxLines: 1,
-    )..layout();
-    // TextPainter may report a single line even when a long unbreakable word
-    // extends beyond the available width. Check the measured width as well so
-    // the wrapping algorithm never clips the tail of an English word.
-    final fits = !painter.didExceedMaxLines && painter.width <= maxWidth;
-    painter.dispose();
-    return fits;
-  }
-
-  int _preferWrapBoundary(String text, int start, int fallbackEnd) {
-    const preferredBoundaryRunes = <int>{
-      0x20,
-      0x09,
-      0x3000,
-      0x3001,
-      0x3002,
-      0xFF0C,
-      0xFF01,
-      0xFF1F,
-      0xFF1A,
-      0xFF1B,
-      0x2014,
-      0x2026,
-      0xFF09,
-      0x002C,
-      0x002E,
-      0x003A,
-      0x003B,
-      0x003F,
-      0x0021,
-      0x0029,
-    };
-
-    final minimumEnd = math.min(start + 1, fallbackEnd);
-    for (var index = fallbackEnd - 1; index >= minimumEnd; index -= 1) {
-      if (fallbackEnd - index > 16) {
-        break;
-      }
-      if (preferredBoundaryRunes.contains(text.codeUnitAt(index))) {
-        return index + 1;
-      }
-    }
-    return fallbackEnd;
+      preferPunctuationLineBreaks: preferPunctuationLineBreaks,
+    );
   }
 }
 
