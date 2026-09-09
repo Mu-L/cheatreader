@@ -213,6 +213,10 @@ class SharedPreferencesReaderPreferencesStore
       settings.readingAnimationEnabled,
     );
     await _preferences.setBool(
+      _textSelectionEnabledKey,
+      settings.textSelectionEnabled,
+    );
+    await _preferences.setBool(
       _preferPunctuationLineBreaksKey,
       settings.preferPunctuationLineBreaks,
     );
