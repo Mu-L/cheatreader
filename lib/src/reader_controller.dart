@@ -572,6 +572,7 @@ class ReaderController extends ChangeNotifier {
         _settings.hideTaskbarIcon == value.hideTaskbarIcon &&
         _settings.locatorHighlightEnabled == value.locatorHighlightEnabled &&
         _settings.readingAnimationEnabled == value.readingAnimationEnabled &&
+        _settings.textSelectionEnabled == value.textSelectionEnabled &&
         _settings.preferPunctuationLineBreaks ==
             value.preferPunctuationLineBreaks &&
         _settings.fontScale == value.fontScale &&
